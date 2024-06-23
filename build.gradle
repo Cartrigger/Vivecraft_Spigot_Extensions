@@ -1,19 +1,6 @@
-import java.nio.file.Files
-import java.nio.file.attribute.FileTime
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
-
-buildscript {
-    dependencies {
-        // needed for java 21
-        classpath 'net.md-5:SpecialSource:1.11.4'
-    }
-}
-
 plugins {
     id 'java'
-    // to automatically remap the final jar
-    id "me.tagavari.nmsremap" version "1.0.0"
+    id "io.papermc.paperweight.userdev" version "1.7.1"
 }
 
 group 'org.vivecraft'
@@ -44,16 +31,20 @@ repositories {
     maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
     maven { url 'https://oss.sonatype.org/content/repositories/central' }
     maven { url 'https://jitpack.io' }
+    maven {
+        url 'https://repo.papermc.io/repository/maven-public/'
+    }
 }
 
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
-    compileOnly 'org.spigotmc:spigot:' + providers.gradleProperty('spigot_version').get() + ':remapped-mojang'
+    // compileOnly 'org.spigotmc:spigot:' + providers.gradleProperty('spigot_version').get() + ':remapped-mojang'
+    // compileOnly 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
+    paperweight.foliaDevBundle("1.20.6-R0.1-SNAPSHOT")
     compileOnly 'com.github.MilkBowl:VaultAPI:1.7.1'
 }
 
-jar.finalizedBy remap
 
 test {
     useJUnitPlatform()
@@ -65,72 +56,5 @@ processResources {
             "version": providers.gradleProperty('plugin_version').get(),
             "api_version": providers.gradleProperty('spigot_api_version').get()
         )
-    }
-}
-
-tasks {
-    remap {
-        //Overrides the Minecraft version to remap against.
-        //You may use this option if your version can't automatically be detected.
-        //Must match a valid Spigot dependency version.
-        version.set(providers.gradleProperty('spigot_version').get())
-
-        //Overrides the default input file
-        //inputFile.set(uberJar.archiveFile)
-
-        //The classifier to add to the end of the output file
-        //(if archiveName is not specified)
-        //archiveClassifier.set("remapped")
-
-        //The name to use for the output file
-        //(if outputFile is not specified)
-        //archiveName.set("plugin-remapped.jar")
-
-        //The archive file to write to
-        //outputFile.set(File(buildDir, "Vivecraft_Spigot_Extensions.jar"))
-    }
-}
-
-
-// Automatically execute the setupTask when Gradle loads the project
-tasks.register("runBuildtools", JavaExec) {
-
-    // check if we need to build the spigot jar
-    def file = new File(System.getProperty("user.home") +
-        '/.m2/repository/org/spigotmc/spigot/' +
-        providers.gradleProperty('spigot_version').get() +
-        '/spigot-' +
-        providers.gradleProperty('spigot_version').get() +
-        '-remapped-mojang.jar')
-
-    if (!file.exists()) {
-        println "didn't find correct spigot version, building:"
-
-        // download buildtools
-        def buildtools = new File(project.projectDir.toString() + '/.gradle/buildtools/BuildTools.jar')
-
-        def buildDir = project.projectDir.toString() + '/.gradle/buildtools'
-
-        workingDir = buildDir
-
-        buildtools.parentFile.mkdirs()
-
-        def timestampXML = new URL('https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/api/xml?tree=timestamp').text
-        def matcher = Pattern.compile("<timestamp>(\\d+?)</timestamp>").matcher(timestampXML)
-        matcher.find()
-        def newTime = Long.parseLong(matcher.group(1))
-        if (!buildtools.exists() || ((FileTime) Files.getAttribute(buildtools.toPath(), "creationTime")).to(TimeUnit.MILLISECONDS) < newTime) {
-            new URL('https://hub.spigotmc.org/jenkins/job/BuildTools/lastSuccessfulBuild/artifact/target/BuildTools.jar').withInputStream { i -> buildtools.withOutputStream { it << i } }
-        }
-        mainClass = "org.spigotmc.builder.Bootstrap"
-        classpath = files(buildtools.absolutePath)
-        args = ["-rev", providers.gradleProperty('mc_version').get(), "--remapped"]
-    }
-    onlyIf { !file.exists() }
-}
-
-tasks.configureEach { task ->
-    if (task.name != "runBuildtools") {
-        task.dependsOn runBuildtools
     }
 }

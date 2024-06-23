@@ -11,7 +11,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Material;
@@ -19,10 +22,10 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.craftbukkit.v1_20_R4.entity.CraftCreeper;
-import org.bukkit.craftbukkit.v1_20_R4.entity.CraftEnderman;
-import org.bukkit.craftbukkit.v1_20_R4.entity.CraftPlayer;
-import org.bukkit.craftbukkit.v1_20_R4.inventory.CraftItemStack;
+import org.bukkit.craftbukkit.entity.CraftCreeper;
+import org.bukkit.craftbukkit.entity.CraftEnderman;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.craftbukkit.inventory.CraftItemStack;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
@@ -56,7 +59,6 @@ import org.vivecraft.utils.Headshot;
 import org.vivecraft.utils.MetadataHelper;
 
 import net.milkbowl.vault.permission.Permission;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
@@ -73,10 +75,10 @@ public class VSE extends JavaPlugin implements Listener {
 	private final static String readurl = "https://raw.githubusercontent.com/jrbudda/Vivecraft_Spigot_Extensions/1.20/version.txt";
 	private final static int bStatsId = 6931;
 
-	public static Map<UUID, VivePlayer> vivePlayers = new HashMap<UUID, VivePlayer>();
+	public static Map<UUID, VivePlayer> vivePlayers = new ConcurrentHashMap<>();
 	public static VSE me;
 
-	private int sendPosDataTask = 0;
+	private ScheduledTask sendPosDataTask = null;
 	public List<String> blocklist = new ArrayList<>();
 
 	public boolean debug = false;
@@ -84,7 +86,6 @@ public class VSE extends JavaPlugin implements Listener {
 	@SuppressWarnings("deprecation")
 	@Override
 	public void onEnable() {
-		super.onEnable();		
 		me = this;
 
 		if(getConfig().getBoolean("general.vive-crafting", true)){
@@ -180,11 +181,7 @@ public class VSE extends JavaPlugin implements Listener {
 
 		debug = (getConfig().getBoolean("general.debug", false));
 
-		sendPosDataTask = getServer().getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
-			public void run() {
-				sendPosData();
-			}
-		}, 20, 1);
+		sendPosDataTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, scheduledTask -> sendPosData(), 20, 1);
 
 		//check for any creepers and modify the fuse radius
 		CheckAllEntities();
@@ -193,18 +190,13 @@ public class VSE extends JavaPlugin implements Listener {
 		if(getServer().getPluginManager().getPlugin("Vault") == null || getServer().getPluginManager().getPlugin("Vault").isEnabled() == false) {
 			getLogger().severe("Vault not found, permissions groups will not be set");
 			vault = false;
-		}	
-		getServer().getScheduler().scheduleAsyncDelayedTask(this, new BukkitRunnable() {
-			@Override
-			public void run() {
-				startUpdateCheck();
-			}
-		}, 1);
+		}
+		// Bukkit.getGlobalRegionScheduler().runDelayed(this, scheduledTask -> startUpdateCheck(), 1);
 	}
 
 	public static ItemStack setLocalizedItemName(ItemStack stack, String key, String fallback) {
 		var nmsStack = CraftItemStack.asNMSCopy(stack);
-		nmsStack.set(DataComponents.CUSTOM_NAME, Component.translatableWithFallback(key, fallback));
+		// nmsStack.set(DataComponents.CUSTOM_NAME, Component.translatableWithFallback(key, fallback));
 		return CraftItemStack.asBukkitCopy(nmsStack);
 	}
 
@@ -299,7 +291,9 @@ public class VSE extends JavaPlugin implements Listener {
 
 	@Override
 	public void onDisable() {
-		getServer().getScheduler().cancelTask(sendPosDataTask);
+		// getServer().getScheduler().cancelTask(sendPosDataTask);
+		if (sendPosDataTask != null && !sendPosDataTask.isCancelled())
+			sendPosDataTask.cancel();
 		super.onDisable();
 	}
 
@@ -325,43 +319,40 @@ public class VSE extends JavaPlugin implements Listener {
 		if (debug) 
 			getLogger().info("Checking " + event.getPlayer().getName() + " for Vivecraft");
 
-		getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
-			@Override
-			public void run() {		
-				if (p.isOnline()) {	
-					boolean kick = false;
+		Bukkit.getGlobalRegionScheduler().runDelayed(this, scheduledTask -> {
+            if (p.isOnline()) {
+                boolean kick = false;
 
-					if(vivePlayers.containsKey(p.getUniqueId())) {
-						VivePlayer vp = VSE.vivePlayers.get(p.getUniqueId());
-						if(debug)
-							getLogger().info(p.getName() + " using: " + vp.version + " " + (vp.isVR() ? "VR" : "NONVR")  + " " + (vp.isSeated() ? "SEATED" : ""));
-						if(!vp.isVR()) kick = true;
-					} else {
-						kick = true;
-						if(debug)
-							getLogger().info(p.getName() + " Vivecraft not detected");
-					}	
+                if(vivePlayers.containsKey(p.getUniqueId())) {
+                    VivePlayer vp = VSE.vivePlayers.get(p.getUniqueId());
+                    if(debug)
+                        getLogger().info(p.getName() + " using: " + vp.version + " " + (vp.isVR() ? "VR" : "NONVR")  + " " + (vp.isSeated() ? "SEATED" : ""));
+                    if(!vp.isVR()) kick = true;
+                } else {
+                    kick = true;
+                    if(debug)
+                        getLogger().info(p.getName() + " Vivecraft not detected");
+                }
 
-					if(kick) {
-						if (getConfig().getBoolean("general.vive-only")) {
-							if (getConfig().getBoolean("general.allow-op") == false || !p.isOp()) {
-								getLogger().info(p.getName() + " " + "got kicked for not using Vivecraft");
-								p.kickPlayer(getConfig().getString("general.vive-only-kickmessage"));
-							}						
-							return;
-						}
-					}
+                if(kick) {
+                    if (getConfig().getBoolean("general.vive-only")) {
+                        if (getConfig().getBoolean("general.allow-op") == false || !p.isOp()) {
+                            getLogger().info(p.getName() + " " + "got kicked for not using Vivecraft");
+                            p.kickPlayer(getConfig().getString("general.vive-only-kickmessage"));
+                        }
+                        return;
+                    }
+                }
 
-					sendWelcomeMessage(p);
-					setPermissionsGroup(p);
-				} else {
-					if (debug) 
-						getLogger().info(p.getName() + " no longer online! ");
-				}		
-			}
-		}, t);
+                sendWelcomeMessage(p);
+                setPermissionsGroup(p);
+            } else {
+                if (debug)
+                    getLogger().info(p.getName() + " no longer online! ");
+            }
+        }, t);
 
-		Connection netManager = (Connection) Reflector.getFieldValue(Reflector.connection, ((CraftPlayer)p).getHandle().connection); 
+		Connection netManager = (Connection) Reflector.getFieldValue(Reflector.connection, ((CraftPlayer)p).getHandle().connection);
 		netManager.channel.pipeline().addBefore("packet_handler", "vr_aim_fix", new AimFixHandler(netManager));
 	}
 

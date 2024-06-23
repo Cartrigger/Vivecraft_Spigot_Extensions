@@ -6,6 +6,7 @@ website: http://www.vivecraft.org/
 author: jrbudda, jaron780
 prefix: Vivecraft
 softdepend: [Vault]
+folia-supported: true
 commands:
    Vive:
       description: Vivecraft Spigot Extensions
