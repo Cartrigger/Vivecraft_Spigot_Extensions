@@ -75,7 +75,7 @@ public class VSE extends JavaPlugin implements Listener {
 	private final static String readurl = "https://raw.githubusercontent.com/jrbudda/Vivecraft_Spigot_Extensions/1.20/version.txt";
 	private final static int bStatsId = 6931;
 
-	public static Map<UUID, VivePlayer> vivePlayers = new ConcurrentHashMap<>();
+	public static Map<UUID, VivePlayer> vivePlayers = new ConcurrentHashMap<UUID, VivePlayer>();
 	public static VSE me;
 
 	private ScheduledTask sendPosDataTask = null;
