@@ -41,7 +41,7 @@ dependencies {
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
     // compileOnly 'org.spigotmc:spigot:' + providers.gradleProperty('spigot_version').get() + ':remapped-mojang'
     // compileOnly 'dev.folia:folia-api:1.20.1-R0.1-SNAPSHOT'
-    paperweight.foliaDevBundle("1.20.6-R0.1-SNAPSHOT")
+    paperweight.foliaDevBundle("1.21.1-R0.1-SNAPSHOT")
     compileOnly 'com.github.MilkBowl:VaultAPI:1.7.1'
 }
 
